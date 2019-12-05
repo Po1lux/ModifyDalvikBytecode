@@ -6,6 +6,7 @@
 #include <android/log.h>
 #include <string.h> //strstr
 #include <stdlib.h> //strtoul
+#include <sys/mman.h> //mprotect
 #include "cn_pollux_modifydalvikbytecode_MainActivity.h"
 
 #define TAG "cs"
@@ -75,13 +76,18 @@ int readUleb128(int *addr, int count) {
 int *skipUleb128(int num, int *address) {
     int read_count;
     int *read_address;
-    int i;
+    int i = 0;
 
     read_count = num;
     read_address = address;
-    for (i = 0; read_count; read_address = (int *) ((char *) read_address + i)) {
-        readUleb128(read_address, (int) &i);
-        --read_count;
+//    for (; read_count; read_address = (int *) ((char *) read_address + i)) {
+//        readUleb128(read_address, (int) &i);
+//        --read_count;
+//    }
+    while(read_count){
+        readUleb128(read_address,(int)&i);
+        read_address = (int*)((char*)read_address+i);
+        read_count--;
     }
     return read_address;
 }
@@ -300,43 +306,58 @@ int getCodeItem1(int dexPos, int classDefItemAddr, int methodIdx) {
 
     instance_fields_addr = skipUleb128(2 * static_fields_size, tclass_data_item_addr);
     direct_methods_addr = skipUleb128(2 * instance_fields_size, instance_fields_addr);
-    LOGD("direct_methods_off:%p",(int*)((char*)direct_methods_addr-dexPos));
-
+    LOGD("direct_methods_off:%p", (int *) ((char *) direct_methods_addr - dexPos));
 
     int *pointAddr = direct_methods_addr;
     int method_idx_diff;
     int access_flags;
     int code_off;
-
+    int devnull;
+    //第一个方法的method_idx_diff就是其方法的methodIdx，其后的method_idx_diff是前一个的关于第一个方法的method_idx_diff就是其方法的methodIdx的差值
+    int first_method_idx_diff = readUleb128(direct_methods_addr, (int) &devnull);
+    int flag = direct_methods_size;
+    methodIdx = methodIdx - first_method_idx_diff;
 
     while (direct_methods_size) {
+        LOGD("method_idx_diff_off:%p", (int *) ((char *) pointAddr - dexPos));
+        //第一个method_idx_diff做特殊处理
         method_idx_diff = readUleb128(pointAddr, (int) &uleb128Bytes);
-        pointAddr = (int *) ((char *) direct_methods_addr + uleb128Bytes);//指向access_flags
-        if (methodIdx-1 == method_idx_diff) {
+        if (flag == direct_methods_size) {
+            method_idx_diff = method_idx_diff - first_method_idx_diff;
+        }
+        pointAddr = (int *) ((char *) pointAddr + uleb128Bytes);//指向access_flags
+        LOGD("access_flags_off:%p", (int *) ((char *) pointAddr - dexPos));
+        if (methodIdx == method_idx_diff) {
             access_flags = readUleb128(pointAddr, (int) &uleb128Bytes);
-            LOGD("access_flags_addr:%p",(int*)((char*)pointAddr-dexPos));
-            LOGD("uleb128Bytes:%d",uleb128Bytes);
             pointAddr = (int *) ((char *) pointAddr + uleb128Bytes);//指向code_item
-            LOGD("code_off_addr:%p",(int*)((char*)pointAddr-dexPos));
+            LOGD("code_off_off:%p", (int *) ((char *) pointAddr - dexPos));
             code_off = readUleb128(pointAddr, (int) &uleb128Bytes);
-            LOGD("code_off:%x",code_off);
-            return code_off+dexPos;
+            LOGD("code_off:%x", code_off);
+            return code_off + dexPos;
         }
         direct_methods_size--;
-        direct_methods_addr = skipUleb128(2, pointAddr);
+        pointAddr = skipUleb128(2, pointAddr);
     }
 
     while (virtual_methods_size) {
+        LOGD("method_idx_diff_off:%p", (int *) ((char *) pointAddr - dexPos));
+        //第一个method_idx_diff做特殊处理
         method_idx_diff = readUleb128(pointAddr, (int) &uleb128Bytes);
-        pointAddr = (int *) ((char *) direct_methods_addr + uleb128Bytes);//指向access_flags
-        if (methodIdx-1 == method_idx_diff) {
+        if (flag == direct_methods_size) {
+            method_idx_diff = method_idx_diff - first_method_idx_diff;
+        }
+        pointAddr = (int *) ((char *) pointAddr + uleb128Bytes);//指向access_flags
+        LOGD("access_flags_off:%p", (int *) ((char *) pointAddr - dexPos));
+        if (methodIdx == method_idx_diff) {
             access_flags = readUleb128(pointAddr, (int) &uleb128Bytes);
             pointAddr = (int *) ((char *) pointAddr + uleb128Bytes);//指向code_item
+            LOGD("code_off_off:%p", (int *) ((char *) pointAddr - dexPos));
             code_off = readUleb128(pointAddr, (int) &uleb128Bytes);
+            LOGD("code_off:%x", code_off);
             return code_off + dexPos;
         }
-        virtual_methods_size--;
-        direct_methods_addr = skipUleb128(2, pointAddr);
+        direct_methods_size--;
+        pointAddr = skipUleb128(2, pointAddr);
     }
 }
 
@@ -357,7 +378,6 @@ int getCodeItem(int search_start_position, int class_def_item_address, int metho
     int DexMethod_methodIdx;
     int *DexMethod_accessFlagsstart_address;
     int Uleb_bytes_read;
-    int tmp;
 
     classDataOff = (int *) (*(int *) (class_def_item_address + 24) + search_start_position);
     LOGD(" classDataOff = %x", classDataOff);
@@ -542,14 +562,21 @@ struct code_item
         LOGD("size:%d",insnssize[k]);
     }
 
-    int *code_insns_address;
-    code_insns_address = (int *)(codeItemAddr+16)-1;
-    LOGD("code_insns_address = %x", code_insns_address);
-    //这里可以先打印方法的指令
-    char instrans[6];//这里的6就是insns_size*2,因为short是两个字节
-    memset(instrans,'\x00',6);
-    memcpy(instrans,code_insns_address, 6);
-    LOGD("%x",*code_insns_address);
 
+    char *code_insns_address;
+    code_insns_address = (char *)(codeItemAddr+16);
+    LOGD("code_insns_address = %x", code_insns_address);
+    char instrans[6];//这里的6就是insns_size*2,因为short是两个字节
+//    memset(instrans,'\x00',6);
+//    memcpy(instrans,code_insns_address, 6);
+    LOGD("%x",code_insns_address[0]);
+
+    void *codeinsns_page_address =
+            (void *)(codeItemAddr + 16 - (codeItemAddr + 16) % (unsigned int)pageSize);
+    LOGD("codeinsns_page_address = %x",codeinsns_page_address);
+
+    mprotect(codeinsns_page_address,pageSize, PROT_READ|PROT_WRITE);
+    char inject[]={0x92,0x00,0x01,0x02,0x0f,0x00};
+    memcpy(code_insns_address,&inject,6);
     return 1;
 }
