@@ -331,7 +331,7 @@ int getCodeItem(int dexPos, int classDefItemAddr, int methodIdx) {
             LOGD("code_off:%x", code_off);
             return code_off + dexPos;
         }
-        direct_methods_size--;
+        virtual_methods_size--;
         pointAddr = skipUleb128(2, pointAddr);
     }
 }
