@@ -349,7 +349,6 @@ int byte2int(void *addr, int size) {
     return result;
 }
 
-
 JNIEXPORT jint JNICALL Java_cn_pollux_modifydalvikbytecode_MainActivity_modifyBytecode
         (JNIEnv *env, jclass clazz) {
 
