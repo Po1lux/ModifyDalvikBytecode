@@ -42,22 +42,22 @@ int readUleb128(int *addr, int count) {
     signed int value_3;
 
     address = addr;
-    result = *addr&0xff;
+    result = *addr & 0xff;
     bytes = 1;
     if ((unsigned int) result > 0x7F)//判断最高bit 0x7f = 0111 1111
     {
-        value_1 = (*address >>8)&0xff;//取下一个8bit
+        value_1 = (*address >> 8) & 0xff;//取下一个8bit
         //第一个字节与第二个字节去除最高位，拼成一个2字节数值
         result = result & 0x7F | (value_1 & 0x7F) << 7;
         bytes = 2;
         if (value_1 > 0x7F)//如果第二个字节最高位为1，即后面还有数值
         {
-            value_2 = (*address >>16)&0xff;//取第三个字节
+            value_2 = (*address >> 16) & 0xff;//取第三个字节
             result |= (value_2 & 0x7F) << 14;//移位，拼成3字节数值
             bytes = 3;
             if (value_2 > 0x7F)//如果第三个字节最高位为1，接着取下面的数值
             {
-                value_3 = (*address >>24)&0xff;
+                value_3 = (*address >> 24) & 0xff;
                 bytes = 4;
                 result |= (value_3 & 0x7F) << 21;
                 if (value_3 > 0x7F)//如果第四个字节最高位为1，接着取下面的数值
@@ -84,9 +84,9 @@ int *skipUleb128(int num, int *address) {
 //        readUleb128(read_address, (int) &i);
 //        --read_count;
 //    }
-    while(read_count){
-        readUleb128(read_address,(int)&i);
-        read_address = (int*)((char*)read_address+i);
+    while (read_count) {
+        readUleb128(read_address, (int) &i);
+        read_address = (int *) ((char *) read_address + i);
         read_count--;
     }
     return read_address;
@@ -164,7 +164,7 @@ struct method_ids_item{
 		uint name_idx;
 }
  */
-int getMethodIdx1(int dexPos, int classTypeIdx, int methodStrIdx) {
+int getMethodIdx(int dexPos, int classTypeIdx, int methodStrIdx) {
     int method_ids_item_size;
     int method_ids_item_addr;
     signed int index = 0;
@@ -187,31 +187,6 @@ int getMethodIdx1(int dexPos, int classTypeIdx, int methodStrIdx) {
     }
 }
 
-int  getMethodIdx(int search_start_position, int method_strIdx, int class_typeIdx)
-{
-    int methodIdsSize;
-    int classIdx;
-    signed int result;
-
-    methodIdsSize = *(int *)(search_start_position + 88);
-    if ( methodIdsSize )
-    {
-        classIdx = search_start_position + *(int *)(search_start_position + 92);
-        result = 0;
-        while ( *(short *)classIdx != class_typeIdx || *(int *)(classIdx + 4) != method_strIdx )
-        {
-            ++result;
-            classIdx += 8;
-            if ( result == methodIdsSize )
-            {result = -1;break;}
-        }
-    }
-    else
-    {
-        result = -1;
-    }
-    return result;
-}
 
 /*
 struct class_def_item
@@ -269,7 +244,7 @@ struct encoded_method
 	uleb128 code_off;
 }
  */
-int getCodeItem1(int dexPos, int classDefItemAddr, int methodIdx) {
+int getCodeItem(int dexPos, int classDefItemAddr, int methodIdx) {
     int static_fields_size;
     int instance_fields_size;
     int direct_methods_size;
@@ -361,111 +336,19 @@ int getCodeItem1(int dexPos, int classDefItemAddr, int methodIdx) {
     }
 }
 
-int getCodeItem(int search_start_position, int class_def_item_address, int methodIdx) {
-
-    int *classDataOff;
-
-    int staticFieldsSize;
-    int *classDataOff_new_start;
-    int instanceFieldsSize;
-
-    int directMethodsSize;
-    int virtualMethodSize;
-
-    int *after_skipstaticfield_address;
-    int *DexMethod_start_address;
-    int result;
-    int DexMethod_methodIdx;
-    int *DexMethod_accessFlagsstart_address;
-    int Uleb_bytes_read;
-
-    classDataOff = (int *) (*(int *) (class_def_item_address + 24) + search_start_position);
-    LOGD(" classDataOff = %x", classDataOff);
-
-    Uleb_bytes_read = 0;
-    staticFieldsSize = readUleb128(classDataOff, (int) &Uleb_bytes_read);
-    LOGD("staticFieldsSize= %d", staticFieldsSize);
-
-    classDataOff_new_start = (int *) ((char *) classDataOff + Uleb_bytes_read);
-    LOGD("staticFieldsSize_addr= %x", classDataOff_new_start);
-
-    instanceFieldsSize = readUleb128(classDataOff_new_start, (int) &Uleb_bytes_read);
-    LOGD("instanceFieldsSize= %d", instanceFieldsSize);
-
-    classDataOff_new_start = (int *) ((char *) classDataOff_new_start + Uleb_bytes_read);
-    LOGD("instanceFieldsSize_addr= %x", classDataOff_new_start);
-
-    directMethodsSize = readUleb128(classDataOff_new_start, (int) &Uleb_bytes_read);
-    LOGD("directMethodsSize= %d", directMethodsSize);
-
-    classDataOff_new_start = (int *) ((char *) classDataOff_new_start + Uleb_bytes_read);
-    LOGD("directMethod_addr= %x", classDataOff_new_start);
-
-    virtualMethodSize = readUleb128(classDataOff_new_start, (int) &Uleb_bytes_read);
-    LOGD("virtualMethodsSize= %d", virtualMethodSize);
-
-    after_skipstaticfield_address = skipUleb128(2 * staticFieldsSize,
-                                                (int *) ((char *) classDataOff_new_start +
-                                                         Uleb_bytes_read));
-    LOGD("after_skipstaticfield_address = %x", after_skipstaticfield_address);
-
-    DexMethod_start_address = skipUleb128(2 * instanceFieldsSize, after_skipstaticfield_address);
-    LOGD("DexMethod_start_address = %x", DexMethod_start_address);
-
-    result = 0;
-    if (directMethodsSize) {
-        DexMethod_methodIdx = 0;
-        int DexMethod_methodIdx_tmp = 0;
-        do {
-
-            DexMethod_methodIdx_tmp = 0;
-            DexMethod_methodIdx = readUleb128(DexMethod_start_address, (int) &Uleb_bytes_read);
-            DexMethod_methodIdx_tmp = readUleb128(DexMethod_start_address, (int) &Uleb_bytes_read);
-
-            LOGD("DexMethod_direct_methodIdx = %x", DexMethod_methodIdx);
-            LOGD("DexMethod_direct_methodIdx_tmp = %x", DexMethod_methodIdx_tmp);
-
-            DexMethod_accessFlagsstart_address = (int *) ((char *) DexMethod_start_address +
-                                                          Uleb_bytes_read);
-            if (DexMethod_methodIdx == methodIdx-1) {
-                readUleb128(DexMethod_accessFlagsstart_address, (int) &Uleb_bytes_read);
-                return readUleb128(
-                        (int *) ((char *) DexMethod_accessFlagsstart_address + Uleb_bytes_read),
-                        (int) &Uleb_bytes_read) + search_start_position;
-            }
-            --directMethodsSize;
-            DexMethod_start_address = skipUleb128(2, DexMethod_accessFlagsstart_address);
-        } while (directMethodsSize);
-        result = 0;
+int byte2int(void *addr, int size) {
+    int result=0;
+    uint16_t byte = 0;
+    uint8_t* map = (uint8_t*)calloc(size,'\x00');
+    memcpy(map,addr,4);
+    for(int i=0;i<size;i++){
+        byte = map[i];
+        result |= byte<<(8*i);
     }
-
-    if (virtualMethodSize) {
-        DexMethod_methodIdx = 0;
-        int DexMethod_methodIdx_tmp = 0;
-        do {
-            DexMethod_methodIdx_tmp = 0;
-            DexMethod_methodIdx = readUleb128(DexMethod_start_address, (int) &Uleb_bytes_read);
-            DexMethod_methodIdx_tmp = readUleb128(DexMethod_start_address, (int) &Uleb_bytes_read);
-
-            LOGD("DexMethod_virtual_methodIdx = %x", DexMethod_methodIdx);
-            LOGD("DexMethod_virtual_methodIdx_tmp = %x", DexMethod_methodIdx_tmp);
-
-            DexMethod_accessFlagsstart_address = (int *) ((char *) DexMethod_start_address +
-                                                          Uleb_bytes_read);
-            if (DexMethod_methodIdx == methodIdx) {
-                readUleb128(DexMethod_accessFlagsstart_address, (int) &Uleb_bytes_read);
-                return readUleb128(
-                        (int *) ((char *) DexMethod_accessFlagsstart_address + Uleb_bytes_read),
-                        (int) &Uleb_bytes_read) + search_start_position;
-            }
-            --virtualMethodSize;
-            DexMethod_start_address = skipUleb128(2, DexMethod_accessFlagsstart_address);
-        } while (virtualMethodSize);
-        result = 0;
-    }
-
+    free(map);
     return result;
 }
+
 
 JNIEXPORT jint JNICALL Java_cn_pollux_modifydalvikbytecode_MainActivity_modifyBytecode
         (JNIEnv *env, jclass clazz) {
@@ -528,7 +411,7 @@ JNIEXPORT jint JNICALL Java_cn_pollux_modifydalvikbytecode_MainActivity_modifyBy
     LOGD("classTypeIdx:%x", classTypeIdx);
 
     int methodIdx = 0;
-    methodIdx = getMethodIdx1(dexPos, classTypeIdx, methodStrIdx);
+    methodIdx = getMethodIdx(dexPos, classTypeIdx, methodStrIdx);
     LOGD("methodIdx:%x", methodIdx);
 
     int classDefItemAddr = 0;
@@ -536,7 +419,7 @@ JNIEXPORT jint JNICALL Java_cn_pollux_modifydalvikbytecode_MainActivity_modifyBy
     LOGD("classDefItemAddr:%x", classDefItemAddr);
 
     int codeItemAddr = 0;
-    codeItemAddr = getCodeItem1(dexPos, classDefItemAddr, methodIdx);
+    codeItemAddr = getCodeItem(dexPos, classDefItemAddr, methodIdx);
     LOGD("codeItemAddr:%x", codeItemAddr);
 
 /*
@@ -554,29 +437,25 @@ struct code_item
     encoded_catch_handler_list handlers; // optional
 }
  */
-    char insnssize[4];
-    void *code_insns_size = (void*)(codeItemAddr+12);
-    memcpy(insnssize,code_insns_size,4);
-    int k = 0;
-    for(int k = 0;k<4;k++){
-        LOGD("size:%d",insnssize[k]);
-    }
+    int *insns_size_addr = (int *) (codeItemAddr + 12);
+    int insns_size = byte2int(insns_size_addr,4)*2;
+    LOGD("insns_size:%d",insns_size);
 
 
     char *code_insns_address;
-    code_insns_address = (char *)(codeItemAddr+16);
-    LOGD("code_insns_address = %x", code_insns_address);
-    char instrans[6];//这里的6就是insns_size*2,因为short是两个字节
-//    memset(instrans,'\x00',6);
-//    memcpy(instrans,code_insns_address, 6);
-    LOGD("%x",code_insns_address[0]);
+    code_insns_address = (char *) (codeItemAddr + 16);
+    char *code = (char*)calloc(insns_size,'\x00');
+    memcpy(code,code_insns_address,insns_size);
+    for(int i= 0;i<insns_size;i++){
+        LOGD("insns:%02x",code[i]);
+    }
 
     void *codeinsns_page_address =
-            (void *)(codeItemAddr + 16 - (codeItemAddr + 16) % (unsigned int)pageSize);
-    LOGD("codeinsns_page_address = %x",codeinsns_page_address);
+            (void *) (codeItemAddr + 16 - (codeItemAddr + 16) % (unsigned int) pageSize);
+    LOGD("codeinsns_page_address = %x", codeinsns_page_address);
 
-    mprotect(codeinsns_page_address,pageSize, PROT_READ|PROT_WRITE);
-    char inject[]={0x92,0x00,0x01,0x02,0x0f,0x00};
-    memcpy(code_insns_address,&inject,6);
+    mprotect(codeinsns_page_address, pageSize, PROT_READ | PROT_WRITE);
+    char inject[] = {0x92, 0x00, 0x01, 0x02, 0x0f, 0x00};
+    memcpy(code_insns_address, &inject, 6);
     return 1;
 }
