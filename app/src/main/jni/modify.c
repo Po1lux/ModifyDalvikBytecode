@@ -452,10 +452,8 @@ struct code_item
 
     void *codeinsns_page_address =
             (void *) (codeItemAddr + 16 - (codeItemAddr + 16) % (unsigned int) pageSize);
-    LOGD("codeinsns_page_address = %x", codeinsns_page_address);
-
     mprotect(codeinsns_page_address, pageSize, PROT_READ | PROT_WRITE);
     char inject[] = {0x92, 0x00, 0x01, 0x02, 0x0f, 0x00};
-    memcpy(code_insns_address, &inject, 6);
+    memcpy(code_insns_address, inject, 6);
     return 1;
 }
