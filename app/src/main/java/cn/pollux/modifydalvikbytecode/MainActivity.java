@@ -5,6 +5,8 @@ import androidx.appcompat.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 
+import dalvik.system.DexFile;
+
 public class MainActivity extends AppCompatActivity {
 
     static {
